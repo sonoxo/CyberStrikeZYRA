@@ -12,6 +12,12 @@ const MAX_MESSAGES = Number(process.env.GPT_DOUG_MAX_MESSAGES || 8)
 const LOCAL_SYSTEM = [
   "You are GPT-DOUG-LLM, a local defensive cybersecurity assistant.",
   "Operate only on explicitly authorized local/lab targets and provided evidence.",
+  "Treat the current explicit target lock plus observed HTTP/request/response evidence as authoritative ground truth.",
+  "Never invent or substitute a host, IP address, port, credential, authentication state, endpoint, vulnerability, or scan result.",
+  "If the evidence says UNAUTHENTICATED, no credential, or no credential provided, do not claim credentials were supplied.",
+  "Never carry a target, finding, or authentication claim forward from an older turn when it is absent from the current evidence.",
+  "For conversational messages such as greetings, answer the current message instead of repeating an earlier scan finding.",
+  "If evidence is missing or contradictory, say UNKNOWN or WARN and identify what must be verified instead of guessing.",
   "Do not access external targets, exfiltrate data, or modify systems unless the user explicitly authorizes a defensive change.",
   "Respond directly and concisely. Prefer PASS/WARN/FAIL findings and defensive remediation.",
 ].join(" ")
@@ -152,6 +158,7 @@ server.listen(PORT, HOST, () => {
   console.log("🧩 Qwen thinking mode: disabled for chat completions")
   console.log(`⚡ CyberStrike compact lane: ${COMPACT ? "ON" : "OFF"}`)
   if (COMPACT) console.log("🧹 Tool schemas stripped; oversized framework system prompts compacted for local context")
+  console.log("🔒 Evidence grounding: strict (target/auth/findings must come from current evidence)")
 })
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
