@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { dirname } from "node:path"
+import { mkdir, readFile, writeFile, access } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import { randomUUID } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { createConnection } from "node:net"
+import os from "node:os"
 
 const DEFAULT_DB = ".cyberstrike/target-shield.json"
 const ACTIVE_ACTIONS = new Set([
@@ -25,6 +27,10 @@ function flag(name, fallback) {
   const i = argv.indexOf(`--${name}`)
   if (i === -1) return fallback
   return argv[i + 1]
+}
+
+function hasFlag(name) {
+  return argv.includes(`--${name}`)
 }
 
 function required(name) {
@@ -154,9 +160,95 @@ function webTarget(target) {
   return `${local ? "http" : "https"}://${target.locator}`
 }
 
+function cyberStrikeHome() {
+  return process.env.CYBERSTRIKE_HOME || join(os.homedir(), ".local", "share", "cyberstrike")
+}
+
+async function pathExists(path) {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function playwrightReady() {
+  const home = cyberStrikeHome()
+  const packageReady = await pathExists(join(home, "node_modules", "playwright", "package.json"))
+  return { home, packageReady }
+}
+
+function cyberStrikeReady() {
+  const probe = spawnSync("cyberstrike", ["--version"], { stdio: "ignore" })
+  return !probe.error && probe.status === 0
+}
+
+async function localEndpointReady(urlString, timeoutMs = 2000) {
+  const url = new URL(urlString)
+  const isLocal = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
+  if (!isLocal) return { checked: false, ready: true, reason: "non-local endpoint not socket-preflighted" }
+  const port = Number(url.port || (url.protocol === "https:" ? 443 : 80))
+  const host = url.hostname.replace(/^\[|\]$/g, "")
+  return await new Promise((resolve) => {
+    const socket = createConnection({ host, port })
+    const timer = setTimeout(() => {
+      socket.destroy()
+      resolve({ checked: true, ready: false, reason: `${host}:${port} did not accept a connection within ${timeoutMs}ms` })
+    }, timeoutMs)
+    socket.once("connect", () => {
+      clearTimeout(timer)
+      socket.destroy()
+      resolve({ checked: true, ready: true, reason: `${host}:${port} is listening` })
+    })
+    socket.once("error", (error) => {
+      clearTimeout(timer)
+      resolve({ checked: true, ready: false, reason: `${host}:${port} is not listening (${error.code ?? error.message})` })
+    })
+  })
+}
+
+async function doctor({ fixBrowser = false } = {}) {
+  const cliReady = cyberStrikeReady()
+  let browser = await playwrightReady()
+  const result = {
+    cyberstrike: cliReady ? "READY" : "MISSING",
+    cyberstrikeHome: browser.home,
+    playwright: browser.packageReady ? "READY" : "MISSING",
+  }
+
+  print(result)
+
+  if (!cliReady) {
+    console.log("FIX: npm install -g @cyberstrike-io/cyberstrike@latest")
+  }
+
+  if (!browser.packageReady && fixBrowser) {
+    console.log(`🔧 installing Playwright into ${browser.home}`)
+    const installPackage = spawnSync("npm", ["install", "--prefix", browser.home, "playwright"], { stdio: "inherit" })
+    if (installPackage.status !== 0) throw new Error("Playwright package installation failed")
+    const installBrowser = spawnSync("npm", ["exec", "--prefix", browser.home, "playwright", "--", "install", "chromium"], { stdio: "inherit" })
+    if (installBrowser.status !== 0) throw new Error("Chromium installation failed")
+    browser = await playwrightReady()
+    console.log(browser.packageReady ? "✅ Playwright package installed" : "❌ Playwright package still missing")
+  } else if (!browser.packageReady) {
+    console.log(`FIX: npm install --prefix ${JSON.stringify(browser.home)} playwright`)
+    console.log(`THEN: npm exec --prefix ${JSON.stringify(browser.home)} playwright -- install chromium`)
+    console.log("OR: rerun doctor with --fix-browser")
+  }
+
+  return cliReady && browser.packageReady
+}
+
 async function main() {
   if (command === "help") {
-    print(`CyberStrike Target Shield\n\nCommands:\n  init\n  add --name NAME --kind host|domain|service|repository|indicator --locator VALUE --owner OWNER [--env lab]\n  authorize TARGET --approved-by NAME --reason TEXT --scope comma,separated,scope [--hours 8]\n  check TARGET --action ACTION\n  score TARGET\n  plan TARGET\n  scope TARGET\n  launch TARGET        # authorized local/lab web target only\n  list\n  audit\n\nActive actions are NO-GO unless the target has a current authorization lease and its locator matches the approved scope. The installed CyberStrike CLI has no top-level --scope flag; Target Shield launches authorized web targets through 'cyberstrike hackbrowser <target>'.`)
+    print(`CyberStrike Target Shield\n\nCommands:\n  init\n  add --name NAME --kind host|domain|service|repository|indicator --locator VALUE --owner OWNER [--env lab]\n  authorize TARGET --approved-by NAME --reason TEXT --scope comma,separated,scope [--hours 8]\n  check TARGET --action ACTION\n  score TARGET\n  plan TARGET\n  scope TARGET\n  doctor [--fix-browser]\n  launch TARGET        # authorized local/lab web target only\n  list\n  audit\n\nActive actions are NO-GO unless the target has a current authorization lease and its locator matches the approved scope. Launch also fails closed when CyberStrike/Playwright are unavailable or a local target is not listening.`)
+    return
+  }
+
+  if (command === "doctor") {
+    const ok = await doctor({ fixBrowser: hasFlag("fix-browser") })
+    if (!ok) process.exitCode = 2
     return
   }
 
@@ -232,7 +324,7 @@ async function main() {
     const result = authorizedScope(target)
     appendAudit(db, { targetId: target.id, actor: "operator", action: "export_authorized_scope", decision: "ALLOW", reason: "Exported Target Shield authorization scope" })
     await saveDb(db, path)
-    return print({ target: target.name, locator: result.locator, authorizedScope: result.scope, decision: result.decision, note: "CyberStrike has no top-level --scope option in the installed CLI. Use Target Shield launch for authorized local/lab web validation." })
+    return print({ target: target.name, locator: result.locator, authorizedScope: result.scope, decision: result.decision })
   }
 
   if (command === "launch") {
@@ -242,7 +334,19 @@ async function main() {
       throw new Error("NO-GO: automatic CyberStrike launch is restricted to local/lab targets")
     }
     const url = webTarget(target)
-    appendAudit(db, { targetId: target.id, actor: "operator", action: "launch_cyberstrike_hackbrowser", decision: "ALLOW", reason: `${result.decision.reason}; launching ${url}` })
+    const endpoint = await localEndpointReady(url)
+    if (!endpoint.ready) {
+      appendAudit(db, { targetId: target.id, actor: "target-shield", action: "launch_preflight", decision: "DENY", reason: `NO-GO: ${endpoint.reason}` })
+      await saveDb(db, path)
+      throw new Error(`NO-GO: target is not ready: ${endpoint.reason}`)
+    }
+    const depsReady = await doctor({ fixBrowser: false })
+    if (!depsReady) {
+      appendAudit(db, { targetId: target.id, actor: "target-shield", action: "launch_preflight", decision: "DENY", reason: "NO-GO: CyberStrike browser runtime is incomplete" })
+      await saveDb(db, path)
+      throw new Error("NO-GO: CyberStrike browser runtime is incomplete; run 'node packages/target-defense/target-shield.mjs doctor --fix-browser'")
+    }
+    appendAudit(db, { targetId: target.id, actor: "operator", action: "launch_cyberstrike_hackbrowser", decision: "ALLOW", reason: `${result.decision.reason}; ${endpoint.reason}; launching ${url}` })
     await saveDb(db, path)
     console.log(`✅ GO: launching CyberStrike HackBrowser for ${url}`)
     const child = spawnSync("cyberstrike", ["hackbrowser", url], { stdio: "inherit" })
