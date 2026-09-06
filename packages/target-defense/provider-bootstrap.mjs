@@ -160,24 +160,45 @@ async function setProjectDefaultModel(modelRef) {
 }
 
 async function verifyContent(modelID) {
-  try {
-    const response = await fetch(`${BRIDGE_API.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: modelID,
-        messages: [{ role: "user", content: "Reply exactly: GPT-DOUG BRIDGE ONLINE" }],
-        temperature: 0,
-        max_tokens: 64,
-      }),
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!response.ok) return false
-    const body = await response.json()
-    return Boolean(body?.choices?.[0]?.message?.content)
-  } catch {
-    return false
+  let lastFailure = "no assistant content"
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(`${BRIDGE_API.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: modelID,
+          messages: [{ role: "user", content: "Reply exactly: GPT-DOUG BRIDGE ONLINE" }],
+          temperature: 0,
+          max_tokens: 128,
+        }),
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (!response.ok) {
+        lastFailure = `HTTP ${response.status}`
+      } else {
+        const body = await response.json()
+        const content = body?.choices?.[0]?.message?.content
+        if (typeof content === "string" && content.trim().length > 0) {
+          console.log(`✅ GPT-DOUG bridge content verified on attempt ${attempt}`)
+          return true
+        }
+        lastFailure = "empty assistant content"
+      }
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error)
+    }
+
+    if (attempt < 3) {
+      console.log(`⏳ GPT-DOUG bridge warmup retry ${attempt}/3 (${lastFailure})`)
+      await sleep(1500)
+    }
   }
+
+  console.error(`❌ GPT-DOUG bridge verification failed: ${lastFailure}`)
+  return false
 }
 
 async function main() {
@@ -194,7 +215,7 @@ async function main() {
   await setProjectDefaultModel(modelRef)
 
   const contentReady = await verifyContent(preferredLocalID)
-  if (!contentReady) throw new Error("GPT-DOUG bridge responded without assistant content")
+  if (!contentReady) throw new Error("GPT-DOUG bridge did not produce assistant content after warmup retries")
 
   console.log("")
   console.log("🔥 GPT-DOUG-LLM LOCAL PROVIDER READY")
