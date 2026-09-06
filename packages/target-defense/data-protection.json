@@ -2,7 +2,7 @@
   "policy": {
     "id": "policy:xunia-data-protection",
     "name": "XUNIA Data Protection Guard",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "defaultClassification": "INTERNAL",
     "defaultEgress": "DENY",
     "allowedClassifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"],
@@ -59,8 +59,9 @@
   "approvedProcessors": [
     {
       "id": "processor:gpt-doug-local",
-      "name": "GPT-DOUG-LLM",
-      "transport": "http://127.0.0.1:9931/v1",
+      "name": "GPT-DOUG-LLM Content Bridge",
+      "transport": "http://127.0.0.1:9932/v1",
+      "upstreamTransport": "http://127.0.0.1:9931/v1",
       "local": true,
       "classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
     },
