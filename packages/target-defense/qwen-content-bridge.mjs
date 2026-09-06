@@ -15,9 +15,19 @@ function readBody(req) {
   })
 }
 
+function requestHeaders(req) {
+  const headers = new Headers()
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined) continue
+    if (["host", "content-length", "connection"].includes(key.toLowerCase())) continue
+    headers.set(key, Array.isArray(value) ? value.join(", ") : String(value))
+  }
+  return headers
+}
+
 function copyResponseHeaders(from, to) {
   for (const [key, value] of from.headers.entries()) {
-    if (["content-length", "transfer-encoding", "connection"].includes(key.toLowerCase())) continue
+    if (["content-length", "transfer-encoding", "connection", "content-encoding"].includes(key.toLowerCase())) continue
     to.setHeader(key, value)
   }
 }
@@ -25,9 +35,7 @@ function copyResponseHeaders(from, to) {
 async function forward(req, res) {
   const target = `${UPSTREAM}${req.url || "/"}`
   const method = req.method || "GET"
-  const headers = { ...req.headers }
-  delete headers.host
-  delete headers["content-length"]
+  const headers = requestHeaders(req)
 
   let body
   if (!["GET", "HEAD"].includes(method)) {
@@ -43,7 +51,7 @@ async function forward(req, res) {
           enable_thinking: false,
         }
         body = JSON.stringify(payload)
-        headers["content-type"] = "application/json"
+        headers.set("content-type", "application/json")
       } catch {
         body = raw
       }
