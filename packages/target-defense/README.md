@@ -8,6 +8,33 @@ Target Shield is a scope-enforced defensive target-management layer for CyberStr
 
 Target Shield separates authorization from execution. It scores risk, creates defensive response plans, checks time-bounded authorization, records audit events, and only permits active validation when the target locator matches the approved scope.
 
+## Ontology = data-protection control plane
+
+The XUNIA ontology exists to protect data, not merely describe infrastructure. `packages/target-defense/data-protection.json` defines protected data classes, owners, purposes, residency, retention, local-only processing rules, approved processors, egress policy, and sensitive-state requirements. `ontology.mjs sync` enforces those rules during RedButton preflight.
+
+Key data controls:
+
+- default egress is **DENY**;
+- `CONFIDENTIAL` and `RESTRICTED` data are local-processing-only unless explicitly reclassified and approved;
+- sensitive Target Shield state and ontology files are forced to private local permissions (`0600` files / `0700` state directory);
+- required host encryption is checked where the platform exposes it;
+- secret-bearing fields such as passwords, tokens, API keys, refresh tokens, and private keys are forbidden from ontology serialization;
+- every allowed data flow must identify a protected DataAsset, processor, purpose, and governing DataProtectionPolicy;
+- a denied data flow or protection-policy violation returns **NO-GO** and stops RedButton preflight.
+
+Run the data guard directly:
+
+```bash
+RedButton ontology
+```
+
+A healthy result includes:
+
+```text
+🔐 data protection: ENFORCED
+"valid": true
+```
+
 ## Safety invariants
 
 1. Active validation is **NO-GO by default**.
@@ -18,7 +45,8 @@ Target Shield separates authorization from execution. It scores risk, creates de
 6. Response actions are defensive: observe, preserve evidence, block, isolate, rotate credentials, disable an owned service, restore, or internal/lab sinkholing.
 7. Automatic CyberStrike launch is restricted to `local` and `lab` targets.
 8. Launch fails closed if CyberStrike/Playwright is incomplete or a local target is not listening.
-9. There is no hack-back or third-party retaliation path.
+9. Ontology data-protection validation must pass before the RedButton stack opens CyberStrike.
+10. There is no hack-back or third-party retaliation path.
 
 ## Quick start (Node; no Bun required)
 
