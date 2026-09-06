@@ -1,0 +1,85 @@
+{
+  "ontology": "xunia-target-shield",
+  "version": "1.0.0",
+  "description": "Operational ontology for GPT-DOUG POCKET, CyberStrike, Target Shield, authorized assets, findings, evidence, and defensive actions.",
+  "objectTypes": {
+    "Runtime": {
+      "key": "id",
+      "required": ["id", "kind", "location", "status"],
+      "properties": ["kind", "location", "status", "transport", "metadata"]
+    },
+    "Model": {
+      "key": "id",
+      "required": ["id", "providerId", "runtimeId", "status"],
+      "properties": ["providerId", "runtimeId", "status", "contextWindow", "capabilities"]
+    },
+    "Provider": {
+      "key": "id",
+      "required": ["id", "name", "api", "status"],
+      "properties": ["name", "api", "status", "authType", "local"]
+    },
+    "Target": {
+      "key": "id",
+      "required": ["id", "name", "kind", "locator", "owner", "environment", "status"],
+      "properties": ["name", "kind", "locator", "owner", "environment", "criticality", "exposure", "confidence", "impact", "status", "tags"]
+    },
+    "AuthorizationLease": {
+      "key": "id",
+      "required": ["id", "targetId", "owner", "approvedBy", "scope", "validFrom", "validUntil", "status"],
+      "properties": ["targetId", "owner", "approvedBy", "scope", "reason", "validFrom", "validUntil", "status"]
+    },
+    "Finding": {
+      "key": "id",
+      "required": ["id", "targetId", "severity", "status"],
+      "properties": ["targetId", "severity", "status", "title", "description", "confidence", "source", "createdAt"]
+    },
+    "Evidence": {
+      "key": "id",
+      "required": ["id", "targetId", "kind", "uri", "createdAt"],
+      "properties": ["targetId", "findingId", "kind", "uri", "hash", "createdAt", "metadata"]
+    },
+    "DefensiveAction": {
+      "key": "id",
+      "required": ["id", "targetId", "action", "decision", "createdAt"],
+      "properties": ["targetId", "authorizationLeaseId", "action", "decision", "reason", "createdAt", "completedAt"]
+    },
+    "AuditEvent": {
+      "key": "id",
+      "required": ["id", "timestamp", "action", "decision"],
+      "properties": ["targetId", "actor", "action", "decision", "reason", "timestamp"]
+    }
+  },
+  "linkTypes": {
+    "RUNS_ON": { "from": "Model", "to": "Runtime", "cardinality": "many-to-one" },
+    "EXPOSED_BY": { "from": "Model", "to": "Provider", "cardinality": "many-to-one" },
+    "AUTHORIZES": { "from": "AuthorizationLease", "to": "Target", "cardinality": "many-to-one" },
+    "HAS_FINDING": { "from": "Target", "to": "Finding", "cardinality": "one-to-many" },
+    "SUPPORTED_BY": { "from": "Finding", "to": "Evidence", "cardinality": "one-to-many" },
+    "ACTS_ON": { "from": "DefensiveAction", "to": "Target", "cardinality": "many-to-one" },
+    "GOVERNED_BY": { "from": "DefensiveAction", "to": "AuthorizationLease", "cardinality": "many-to-one" },
+    "RECORDED_AS": { "from": "DefensiveAction", "to": "AuditEvent", "cardinality": "one-to-many" }
+  },
+  "actionTypes": {
+    "Observe": { "requiresAuthorization": false, "class": "passive" },
+    "PreserveEvidence": { "requiresAuthorization": false, "class": "passive" },
+    "Scan": { "requiresAuthorization": true, "class": "active-validation" },
+    "Probe": { "requiresAuthorization": true, "class": "active-validation" },
+    "Contain": { "requiresAuthorization": true, "class": "defensive-response" },
+    "Isolate": { "requiresAuthorization": true, "class": "defensive-response" },
+    "Block": { "requiresAuthorization": true, "class": "defensive-response" },
+    "RotateCredentials": { "requiresAuthorization": true, "class": "defensive-response" },
+    "DisableOwnedService": { "requiresAuthorization": true, "class": "defensive-response" },
+    "Restore": { "requiresAuthorization": true, "class": "recovery" },
+    "InternalSinkhole": { "requiresAuthorization": true, "class": "defensive-response", "environments": ["local", "lab"] }
+  },
+  "invariants": [
+    "Active actions fail closed without an active AuthorizationLease.",
+    "AuthorizationLease.owner must equal Target.owner.",
+    "Target.locator must match at least one AuthorizationLease.scope entry for active actions.",
+    "AuthorizationLease.validUntil must be after validFrom and no more than 168 hours later.",
+    "Automatic execution is restricted to Target.environment in {local, lab}.",
+    "Defensive actions operate only on owned or explicitly authorized assets.",
+    "Every active decision must produce an AuditEvent.",
+    "External hack-back or third-party retaliation is not represented as an action type."
+  ]
+}
