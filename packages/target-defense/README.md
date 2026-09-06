@@ -17,7 +17,8 @@ Target Shield separates authorization from execution. It scores risk, creates de
 5. Every authorization decision is written to `.cyberstrike/target-shield.json`.
 6. Response actions are defensive: observe, preserve evidence, block, isolate, rotate credentials, disable an owned service, restore, or internal/lab sinkholing.
 7. Automatic CyberStrike launch is restricted to `local` and `lab` targets.
-8. There is no hack-back or third-party retaliation path.
+8. Launch fails closed if CyberStrike/Playwright is incomplete or a local target is not listening.
+9. There is no hack-back or third-party retaliation path.
 
 ## Quick start (Node; no Bun required)
 
@@ -43,17 +44,27 @@ node packages/target-defense/target-shield.mjs check xunia-local --action scan
 node packages/target-defense/target-shield.mjs scope xunia-local
 ```
 
-If you already use Bun, the TypeScript implementation remains available with:
+## Runtime doctor
+
+Check CyberStrike and its browser runtime before launch:
 
 ```bash
-bun --cwd packages/target-defense start:bun init
+node packages/target-defense/target-shield.mjs doctor
 ```
+
+If Playwright/Chromium is missing, install it into CyberStrike's runtime with the explicit repair option:
+
+```bash
+node packages/target-defense/target-shield.mjs doctor --fix-browser
+```
+
+`CYBERSTRIKE_HOME` can override the default runtime directory (`~/.local/share/cyberstrike`).
 
 ## Launch an authorized local/lab web target
 
 The installed CyberStrike CLI does **not** expose a top-level `--scope` flag. Its supported web-target entry point is `cyberstrike hackbrowser <target>`.
 
-Target Shield therefore performs the authorization check first, then launches the approved local/lab target through that supported command:
+Target Shield performs the authorization check, confirms the local endpoint is listening, confirms the browser runtime is present, and only then launches the approved local/lab target:
 
 ```bash
 node packages/target-defense/target-shield.mjs launch xunia-local
@@ -65,7 +76,7 @@ For `localhost:3000`, Target Shield resolves the web target to `http://localhost
 cyberstrike hackbrowser http://localhost:3000
 ```
 
-The launch is recorded in the Target Shield audit database before execution. Non-local/non-lab automatic launches fail closed.
+If nothing is listening on port 3000, launch returns `NO-GO` instead of sending CyberStrike into a dead endpoint. The decision is recorded in the audit database.
 
 ## Priority model
 
