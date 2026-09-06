@@ -3,6 +3,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { randomUUID } from "node:crypto"
+import { spawnSync } from "node:child_process"
 
 const DEFAULT_DB = ".cyberstrike/target-shield.json"
 const ACTIVE_ACTIONS = new Set([
@@ -138,15 +139,24 @@ function buildResponsePlan(target) {
   return { targetId: target.id, priority: p.tier, actions: [...new Set(actions)], rationale }
 }
 
-function cyberStrikeScopeArgs(target) {
+function authorizedScope(target) {
   const decision = authorizeAction(target, "scan")
   if (!decision.allowed) throw new Error(decision.reason)
-  return target.authorization.scope.flatMap((entry) => ["--scope", entry])
+  return { locator: target.locator, scope: [...target.authorization.scope], decision }
+}
+
+function webTarget(target) {
+  if (!["host", "domain", "service"].includes(target.kind)) {
+    throw new Error(`Target kind ${target.kind} is not a web-launch target`)
+  }
+  if (/^https?:\/\//i.test(target.locator)) return target.locator
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(target.locator)
+  return `${local ? "http" : "https"}://${target.locator}`
 }
 
 async function main() {
   if (command === "help") {
-    print(`CyberStrike Target Shield (Node fallback)\n\nCommands:\n  init\n  add --name NAME --kind host|domain|service|repository|indicator --locator VALUE --owner OWNER [--env lab]\n  authorize TARGET --approved-by NAME --reason TEXT --scope comma,separated,scope [--hours 8]\n  check TARGET --action ACTION\n  score TARGET\n  plan TARGET\n  scope TARGET\n  list\n  audit\n\nActive actions are NO-GO unless the target has a current authorization lease and its locator matches the approved scope.`)
+    print(`CyberStrike Target Shield\n\nCommands:\n  init\n  add --name NAME --kind host|domain|service|repository|indicator --locator VALUE --owner OWNER [--env lab]\n  authorize TARGET --approved-by NAME --reason TEXT --scope comma,separated,scope [--hours 8]\n  check TARGET --action ACTION\n  score TARGET\n  plan TARGET\n  scope TARGET\n  launch TARGET        # authorized local/lab web target only\n  list\n  audit\n\nActive actions are NO-GO unless the target has a current authorization lease and its locator matches the approved scope. The installed CyberStrike CLI has no top-level --scope flag; Target Shield launches authorized web targets through 'cyberstrike hackbrowser <target>'.`)
     return
   }
 
@@ -208,6 +218,7 @@ async function main() {
   }
 
   if (command === "score") return print(priority(findTarget(db, targetRef())))
+
   if (command === "plan") {
     const target = findTarget(db, targetRef())
     const plan = buildResponsePlan(target)
@@ -215,13 +226,32 @@ async function main() {
     await saveDb(db, path)
     return print(plan)
   }
+
   if (command === "scope") {
     const target = findTarget(db, targetRef())
-    const scopeArgs = cyberStrikeScopeArgs(target)
-    appendAudit(db, { targetId: target.id, actor: "operator", action: "export_cyberstrike_scope", decision: "ALLOW", reason: "Exported authorization-constrained CyberStrike scope" })
+    const result = authorizedScope(target)
+    appendAudit(db, { targetId: target.id, actor: "operator", action: "export_authorized_scope", decision: "ALLOW", reason: "Exported Target Shield authorization scope" })
     await saveDb(db, path)
-    return print({ target: target.name, args: scopeArgs, shell: `cyberstrike ${scopeArgs.map((v) => JSON.stringify(v)).join(" ")}` })
+    return print({ target: target.name, locator: result.locator, authorizedScope: result.scope, decision: result.decision, note: "CyberStrike has no top-level --scope option in the installed CLI. Use Target Shield launch for authorized local/lab web validation." })
   }
+
+  if (command === "launch") {
+    const target = findTarget(db, targetRef())
+    const result = authorizedScope(target)
+    if (!["local", "lab"].includes(target.environment)) {
+      throw new Error("NO-GO: automatic CyberStrike launch is restricted to local/lab targets")
+    }
+    const url = webTarget(target)
+    appendAudit(db, { targetId: target.id, actor: "operator", action: "launch_cyberstrike_hackbrowser", decision: "ALLOW", reason: `${result.decision.reason}; launching ${url}` })
+    await saveDb(db, path)
+    console.log(`✅ GO: launching CyberStrike HackBrowser for ${url}`)
+    const child = spawnSync("cyberstrike", ["hackbrowser", url], { stdio: "inherit" })
+    if (child.error?.code === "ENOENT") throw new Error("cyberstrike command not found in PATH")
+    if (child.error) throw child.error
+    if (typeof child.status === "number" && child.status !== 0) process.exitCode = child.status
+    return
+  }
+
   if (command === "list") return print(db.targets.map((target) => ({ id: target.id, name: target.name, kind: target.kind, locator: target.locator, owner: target.owner, status: target.status, priority: priority(target).tier })))
   if (command === "audit") return print(db.audit)
   throw new Error(`Unknown command: ${command}`)
