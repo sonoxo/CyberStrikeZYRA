@@ -5,6 +5,16 @@ import http from "node:http"
 const HOST = process.env.GPT_DOUG_BRIDGE_HOST || "127.0.0.1"
 const PORT = Number(process.env.GPT_DOUG_BRIDGE_PORT || 9932)
 const UPSTREAM = (process.env.GPT_DOUG_UPSTREAM || "http://127.0.0.1:9931").replace(/\/$/, "")
+const COMPACT = process.env.GPT_DOUG_COMPACT !== "0"
+const MAX_SYSTEM_CHARS = Number(process.env.GPT_DOUG_MAX_SYSTEM_CHARS || 1400)
+const MAX_MESSAGES = Number(process.env.GPT_DOUG_MAX_MESSAGES || 8)
+
+const LOCAL_SYSTEM = [
+  "You are GPT-DOUG-LLM, a local defensive cybersecurity assistant.",
+  "Operate only on explicitly authorized local/lab targets and provided evidence.",
+  "Do not access external targets, exfiltrate data, or modify systems unless the user explicitly authorizes a defensive change.",
+  "Respond directly and concisely. Prefer PASS/WARN/FAIL findings and defensive remediation.",
+].join(" ")
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -32,6 +42,42 @@ function copyResponseHeaders(from, to) {
   }
 }
 
+function compactMessages(messages) {
+  if (!Array.isArray(messages)) return messages
+
+  const nonSystem = messages.filter((message) => message?.role !== "system")
+  const system = messages.filter((message) => message?.role === "system")
+
+  // Preserve short, target-specific system context but discard giant framework/tool
+  // instruction blocks that overwhelm the 2K-context USB runtime.
+  const usefulSystem = system
+    .map((message) => ({ ...message, content: typeof message?.content === "string" ? message.content : "" }))
+    .filter((message) => message.content && message.content.length <= MAX_SYSTEM_CHARS)
+    .slice(-2)
+
+  const recent = nonSystem.slice(-Math.max(1, MAX_MESSAGES - usefulSystem.length - 1))
+  return [{ role: "system", content: LOCAL_SYSTEM }, ...usefulSystem, ...recent]
+}
+
+function compactCyberStrikePayload(payload) {
+  if (!COMPACT || !payload || typeof payload !== "object") return payload
+
+  // Qwen3-0.6B on GPT-DOUG POCKET currently runs with a small context. CyberStrike's
+  // full tool schema alone can exceed it, so local inference uses a text-only lane.
+  // Target Shield / ontology / HackBrowser remain the execution and authorization gates.
+  delete payload.tools
+  delete payload.tool_choice
+  delete payload.parallel_tool_calls
+
+  payload.messages = compactMessages(payload.messages)
+
+  const requested = Number(payload.max_tokens)
+  if (!Number.isFinite(requested) || requested <= 0) payload.max_tokens = 384
+  else payload.max_tokens = Math.min(requested, 512)
+
+  return payload
+}
+
 async function forward(req, res) {
   const target = `${UPSTREAM}${req.url || "/"}`
   const method = req.method || "GET"
@@ -50,6 +96,7 @@ async function forward(req, res) {
           ...(payload.chat_template_kwargs || {}),
           enable_thinking: false,
         }
+        compactCyberStrikePayload(payload)
         body = JSON.stringify(payload)
         headers.set("content-type", "application/json")
       } catch {
@@ -103,6 +150,8 @@ server.listen(PORT, HOST, () => {
   console.log(`🧠 GPT-DOUG content bridge listening on http://${HOST}:${PORT}/v1`)
   console.log(`💾 upstream USB gateway: ${UPSTREAM}/v1`)
   console.log("🧩 Qwen thinking mode: disabled for chat completions")
+  console.log(`⚡ CyberStrike compact lane: ${COMPACT ? "ON" : "OFF"}`)
+  if (COMPACT) console.log("🧹 Tool schemas stripped; oversized framework system prompts compacted for local context")
 })
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
