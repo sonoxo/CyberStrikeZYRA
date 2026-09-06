@@ -1,0 +1,74 @@
+{
+  "policy": {
+    "id": "policy:xunia-data-protection",
+    "name": "XUNIA Data Protection Guard",
+    "version": "1.0.0",
+    "defaultClassification": "INTERNAL",
+    "defaultEgress": "DENY",
+    "allowedClassifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"],
+    "localProcessingOnlyFor": ["CONFIDENTIAL", "RESTRICTED"],
+    "requirePrivatePermissionsFor": ["CONFIDENTIAL", "RESTRICTED"],
+    "forbiddenGraphKeys": ["password", "passwd", "secret", "apiKey", "api_key", "accessToken", "refreshToken", "privateKey", "private_key"],
+    "allowedLocalTransports": ["127.0.0.1", "localhost", "::1"],
+    "retention": {
+      "inferenceTransientHours": 24,
+      "auditDays": 30,
+      "authorizationDays": 7
+    }
+  },
+  "dataAssets": [
+    {
+      "id": "data:target-shield-db",
+      "name": "Target Shield State",
+      "path": ".cyberstrike/target-shield.json",
+      "classification": "CONFIDENTIAL",
+      "owner": "xunia",
+      "purpose": "authorization, scope, target state and audit decisions",
+      "residency": "local-host",
+      "egress": "DENY",
+      "retention": "policy-managed",
+      "encryptionRequired": true,
+      "privatePermissionsRequired": true
+    },
+    {
+      "id": "data:ontology-graph",
+      "name": "Target Shield Ontology Graph",
+      "path": ".cyberstrike/ontology.json",
+      "classification": "CONFIDENTIAL",
+      "owner": "xunia",
+      "purpose": "policy decisions, lineage and defensive control relationships",
+      "residency": "local-host",
+      "egress": "DENY",
+      "retention": "current-state",
+      "encryptionRequired": true,
+      "privatePermissionsRequired": true
+    },
+    {
+      "id": "data:local-inference-context",
+      "name": "GPT-DOUG Local Inference Context",
+      "classification": "RESTRICTED",
+      "owner": "xunia",
+      "purpose": "local defensive analysis",
+      "residency": "local-only",
+      "egress": "DENY",
+      "retention": "transient",
+      "encryptionRequired": true,
+      "privatePermissionsRequired": false
+    }
+  ],
+  "approvedProcessors": [
+    {
+      "id": "processor:gpt-doug-local",
+      "name": "GPT-DOUG-LLM",
+      "transport": "http://127.0.0.1:9931/v1",
+      "local": true,
+      "classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+    },
+    {
+      "id": "processor:cyberstrike-local",
+      "name": "CyberStrike Local Runtime",
+      "local": true,
+      "classifications": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+    }
+  ]
+}
