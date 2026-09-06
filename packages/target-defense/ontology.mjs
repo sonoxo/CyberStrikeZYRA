@@ -80,7 +80,7 @@ async function buildGraph() {
 
   for (const target of shield.targets ?? []) {
     const id = targetId(target)
-    objects.push({ objectType: "Target", id, ...target })
+    objects.push({ ...target, sourceId: target.id, objectType: "Target", id })
     if (target.authorization) {
       const lease = target.authorization
       const lid = leaseId(target)
@@ -104,12 +104,12 @@ async function buildGraph() {
 
   for (const event of shield.audit ?? []) {
     const id = `audit:${event.id}`
-    objects.push({ objectType: "AuditEvent", id, ...event })
+    objects.push({ ...event, sourceId: event.id, objectType: "AuditEvent", id })
   }
 
   return {
     ontology: "xunia-target-shield",
-    version: "1.0.0",
+    version: "1.0.1",
     generatedAt: new Date().toISOString(),
     defaultModel: cs.model ?? null,
     objects,
@@ -132,6 +132,16 @@ function matchesScope(locator, scope = []) {
 function validate(graph) {
   const errors = []
   const warnings = []
+  const seen = new Set()
+  for (const object of graph.objects) {
+    if (!object?.id) {
+      errors.push(`${object?.objectType ?? "Object"}: missing ontology id`)
+      continue
+    }
+    if (seen.has(object.id)) errors.push(`${object.id}: duplicate ontology id`)
+    seen.add(object.id)
+  }
+
   const byId = new Map(graph.objects.map((o) => [o.id, o]))
   const leases = graph.objects.filter((o) => o.objectType === "AuthorizationLease")
 
@@ -144,6 +154,11 @@ function validate(graph) {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) errors.push(`${lease.id}: invalid time window`)
     if (Number.isFinite(start) && Number.isFinite(end) && end - start > 168 * 3600000) errors.push(`${lease.id}: lease exceeds 168 hours`)
     if (!matchesScope(target.locator, lease.scope)) errors.push(`${lease.id}: target locator outside scope`)
+  }
+
+  for (const link of graph.links) {
+    if (!byId.has(link.from)) errors.push(`${link.linkType}: source missing (${link.from})`)
+    if (!byId.has(link.to)) errors.push(`${link.linkType}: destination missing (${link.to})`)
   }
 
   const provider = byId.get("provider:gpt-doug-llm")
