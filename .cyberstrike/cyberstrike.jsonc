@@ -6,5 +6,60 @@
     }
   },
   "mcp": {
+    "github-security": {
+      "type": "local",
+      "command": ["npx", "-y", "github-security-mcp"],
+      "enabled": true
+    },
+    "cve": {
+      "type": "local",
+      "command": ["npx", "-y", "cve-mcp"],
+      "enabled": true
+    },
+    "osint": {
+      "type": "local",
+      "command": ["npx", "-y", "osint-mcp-server"],
+      "enabled": true
+    },
+    "cloud-audit": {
+      "type": "local",
+      "command": ["sh", "-lc", "exec bun run \"$HOME/.local/share/cyberstrike-mcp/cloud-audit-mcp/src/index.ts\""],
+      "enabled": true
+    },
+    "hackbrowser": {
+      "type": "local",
+      "command": ["sh", "-lc", "exec bun run \"$HOME/.local/share/cyberstrike-mcp/hackbrowser-mcp/src/index.ts\" --mcp"],
+      "enabled": true
+    },
+    "darknet": {
+      "type": "local",
+      "command": ["npx", "-y", "darknet-mcp-server"],
+      "enabled": true
+    },
+    "dns-security": {
+      "type": "local",
+      "command": ["npx", "-y", "dns-security-mcp"],
+      "enabled": true
+    },
+    "supply-chain": {
+      "type": "local",
+      "command": ["npx", "-y", "supply-chain-mcp-server"],
+      "enabled": true
+    },
+    "mcp-scanner": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-security-scanner"],
+      "enabled": true
+    },
+    "steganography": {
+      "type": "local",
+      "command": ["npx", "-y", "steganography-mcp"],
+      "enabled": true
+    },
+    "satellite": {
+      "type": "local",
+      "command": ["npx", "-y", "satellite-mcp"],
+      "enabled": true
+    }
   }
 }
