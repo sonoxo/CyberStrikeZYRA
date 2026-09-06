@@ -6,7 +6,7 @@ Target Shield is a scope-enforced defensive target-management layer for CyberStr
 
 `DISCOVER → VERIFY → PRIORITIZE → AUTHORIZE → VALIDATE → CONTAIN → RECOVER → LEARN`
 
-The package intentionally separates **decisioning** from **execution**. It scores risk, creates a defensive response plan, checks authorization, and exports only the approved `--scope` arguments for CyberStrike.
+Target Shield separates authorization from execution. It scores risk, creates defensive response plans, checks time-bounded authorization, records audit events, and only permits active validation when the target locator matches the approved scope.
 
 ## Safety invariants
 
@@ -16,9 +16,10 @@ The package intentionally separates **decisioning** from **execution**. It score
 4. Authorization expires automatically (maximum lease: 168 hours).
 5. Every authorization decision is written to `.cyberstrike/target-shield.json`.
 6. Response actions are defensive: observe, preserve evidence, block, isolate, rotate credentials, disable an owned service, restore, or internal/lab sinkholing.
-7. There is no hack-back or third-party retaliation path.
+7. Automatic CyberStrike launch is restricted to `local` and `lab` targets.
+8. There is no hack-back or third-party retaliation path.
 
-## Mac / Node quick start (no Bun required)
+## Quick start (Node; no Bun required)
 
 Run these commands from the **CyberStrikeZYRA repository root**:
 
@@ -26,23 +27,20 @@ Run these commands from the **CyberStrikeZYRA repository root**:
 node packages/target-defense/target-shield.mjs init
 
 node packages/target-defense/target-shield.mjs add \
-  --name xunia-staging \
-  --kind domain \
-  --locator staging.example.internal \
+  --name xunia-local \
+  --kind service \
+  --locator localhost:3000 \
   --owner xunia \
-  --env staging \
-  --criticality 4 --exposure 3 --confidence 4 --impact 4
+  --env local
 
-node packages/target-defense/target-shield.mjs authorize xunia-staging \
-  --approved-by security-owner \
-  --reason "scheduled defensive validation" \
-  --scope staging.example.internal \
+node packages/target-defense/target-shield.mjs authorize xunia-local \
+  --approved-by doug \
+  --reason "local defensive validation" \
+  --scope localhost:3000 \
   --hours 8
 
-node packages/target-defense/target-shield.mjs score xunia-staging
-node packages/target-defense/target-shield.mjs plan xunia-staging
-node packages/target-defense/target-shield.mjs check xunia-staging --action scan
-node packages/target-defense/target-shield.mjs scope xunia-staging
+node packages/target-defense/target-shield.mjs check xunia-local --action scan
+node packages/target-defense/target-shield.mjs scope xunia-local
 ```
 
 If you already use Bun, the TypeScript implementation remains available with:
@@ -51,13 +49,23 @@ If you already use Bun, the TypeScript implementation remains available with:
 bun --cwd packages/target-defense start:bun init
 ```
 
-The `scope` command prints the authorization-constrained CyberStrike scope, for example:
+## Launch an authorized local/lab web target
 
-```text
-cyberstrike --scope "staging.example.internal"
+The installed CyberStrike CLI does **not** expose a top-level `--scope` flag. Its supported web-target entry point is `cyberstrike hackbrowser <target>`.
+
+Target Shield therefore performs the authorization check first, then launches the approved local/lab target through that supported command:
+
+```bash
+node packages/target-defense/target-shield.mjs launch xunia-local
 ```
 
-Target Shield does **not** automatically execute the generated command. This keeps authorization and operator intent explicit.
+For `localhost:3000`, Target Shield resolves the web target to `http://localhost:3000` and invokes:
+
+```text
+cyberstrike hackbrowser http://localhost:3000
+```
+
+The launch is recorded in the Target Shield audit database before execution. Non-local/non-lab automatic launches fail closed.
 
 ## Priority model
 
