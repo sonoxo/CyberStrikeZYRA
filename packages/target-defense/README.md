@@ -18,12 +18,14 @@ The package intentionally separates **decisioning** from **execution**. It score
 6. Response actions are defensive: observe, preserve evidence, block, isolate, rotate credentials, disable an owned service, restore, or internal/lab sinkholing.
 7. There is no hack-back or third-party retaliation path.
 
-## Quick start
+## Mac / Node quick start (no Bun required)
+
+Run these commands from the **CyberStrikeZYRA repository root**:
 
 ```bash
-bun --cwd packages/target-defense start init
+node packages/target-defense/target-shield.mjs init
 
-bun --cwd packages/target-defense start add \
+node packages/target-defense/target-shield.mjs add \
   --name xunia-staging \
   --kind domain \
   --locator staging.example.internal \
@@ -31,19 +33,25 @@ bun --cwd packages/target-defense start add \
   --env staging \
   --criticality 4 --exposure 3 --confidence 4 --impact 4
 
-bun --cwd packages/target-defense start authorize xunia-staging \
+node packages/target-defense/target-shield.mjs authorize xunia-staging \
   --approved-by security-owner \
   --reason "scheduled defensive validation" \
   --scope staging.example.internal \
   --hours 8
 
-bun --cwd packages/target-defense start score xunia-staging
-bun --cwd packages/target-defense start plan xunia-staging
-bun --cwd packages/target-defense start check xunia-staging --action scan
-bun --cwd packages/target-defense start scope xunia-staging
+node packages/target-defense/target-shield.mjs score xunia-staging
+node packages/target-defense/target-shield.mjs plan xunia-staging
+node packages/target-defense/target-shield.mjs check xunia-staging --action scan
+node packages/target-defense/target-shield.mjs scope xunia-staging
 ```
 
-The final command prints the authorization-constrained CyberStrike scope, for example:
+If you already use Bun, the TypeScript implementation remains available with:
+
+```bash
+bun --cwd packages/target-defense start:bun init
+```
+
+The `scope` command prints the authorization-constrained CyberStrike scope, for example:
 
 ```text
 cyberstrike --scope "staging.example.internal"
