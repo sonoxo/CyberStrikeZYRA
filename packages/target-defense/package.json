@@ -1,11 +1,12 @@
 {
   "name": "@cyberstrike-io/target-defense",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Scope-enforced defensive target management and incident response planning for CyberStrike",
   "scripts": {
-    "start": "bun src/index.ts",
+    "start": "node target-shield.mjs",
+    "start:bun": "bun src/index.ts",
     "typecheck": "bunx tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions src/index.ts src/model.ts src/policy.ts src/store.ts",
     "test": "bun test"
   }
