@@ -48,21 +48,68 @@ function copyResponseHeaders(from, to) {
   }
 }
 
+function messageText(message) {
+  if (typeof message?.content === "string") return message.content
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((part) => (typeof part === "string" ? part : typeof part?.text === "string" ? part.text : ""))
+      .filter(Boolean)
+      .join("\n")
+  }
+  return ""
+}
+
+function extractCurrentEvidence(messages) {
+  if (!Array.isArray(messages)) return ""
+
+  // Only inspect current non-assistant context. Assistant history can contain prior
+  // hallucinations and must never become evidence for the next turn.
+  const texts = messages
+    .filter((message) => message?.role !== "assistant")
+    .map(messageText)
+    .filter(Boolean)
+    .slice(-6)
+  const joined = texts.join("\n")
+  const facts = []
+
+  const target = joined.match(/https?:\/\/(localhost|127\.0\.0\.1)(?::(\d{1,5}))?/i)
+  const hostHeader = joined.match(/(?:^|\n)host:\s*(localhost|127\.0\.0\.1)(?::(\d{1,5}))?/i)
+  const authUnauthenticated = /UNAUTHENTICATED|no credential provided|credentials?\s*:\s*none/i.test(joined)
+  const status = joined.match(/\[Status:\s*(\d{3})\b/i) || joined.match(/HTTP\/\d(?:\.\d)?\s+(\d{3})\b/i)
+
+  const host = target?.[1] ?? hostHeader?.[1]
+  const port = target?.[2] ?? hostHeader?.[2]
+  if (host) facts.push(`authorized/observed target=${host}${port ? `:${port}` : ""}`)
+  if (authUnauthenticated) facts.push("authentication=UNAUTHENTICATED; credentials=none observed")
+  if (status?.[1]) facts.push(`http_status=${status[1]}`)
+
+  if (!facts.length) return ""
+  return `CURRENT OBSERVED EVIDENCE (authoritative; do not contradict): ${facts.join("; ")}.`
+}
+
 function compactMessages(messages) {
   if (!Array.isArray(messages)) return messages
 
-  const nonSystem = messages.filter((message) => message?.role !== "system")
   const system = messages.filter((message) => message?.role === "system")
+  const nonAssistant = messages.filter((message) => message?.role !== "system" && message?.role !== "assistant")
 
-  // Preserve short, target-specific system context but discard giant framework/tool
-  // instruction blocks that overwhelm the 2K-context USB runtime.
+  // Preserve short target-specific system context. Drop all prior assistant turns so
+  // stale hallucinations cannot be recycled into the next answer.
   const usefulSystem = system
-    .map((message) => ({ ...message, content: typeof message?.content === "string" ? message.content : "" }))
+    .map((message) => ({ ...message, content: messageText(message) }))
     .filter((message) => message.content && message.content.length <= MAX_SYSTEM_CHARS)
     .slice(-2)
 
-  const recent = nonSystem.slice(-Math.max(1, MAX_MESSAGES - usefulSystem.length - 1))
-  return [{ role: "system", content: LOCAL_SYSTEM }, ...usefulSystem, ...recent]
+  const evidence = extractCurrentEvidence(messages)
+  const reserved = 1 + usefulSystem.length + (evidence ? 1 : 0)
+  const recent = nonAssistant.slice(-Math.max(1, MAX_MESSAGES - reserved))
+
+  return [
+    { role: "system", content: LOCAL_SYSTEM },
+    ...(evidence ? [{ role: "system", content: evidence }] : []),
+    ...usefulSystem,
+    ...recent,
+  ]
 }
 
 function compactCyberStrikePayload(payload) {
@@ -158,7 +205,7 @@ server.listen(PORT, HOST, () => {
   console.log("🧩 Qwen thinking mode: disabled for chat completions")
   console.log(`⚡ CyberStrike compact lane: ${COMPACT ? "ON" : "OFF"}`)
   if (COMPACT) console.log("🧹 Tool schemas stripped; oversized framework system prompts compacted for local context")
-  console.log("🔒 Evidence grounding: strict (target/auth/findings must come from current evidence)")
+  console.log("🔒 Evidence grounding: strict; stale assistant history removed")
 })
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
