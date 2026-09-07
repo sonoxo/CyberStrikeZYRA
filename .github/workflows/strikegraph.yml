@@ -1,0 +1,35 @@
+name: strikegraph
+
+on:
+  pull_request:
+    paths:
+      - ".cyberstrike/tool/strikegraph.ts"
+      - ".cyberstrike/ontology/strikegraph.json"
+      - ".cyberstrike/skill/strikegraph/**"
+      - "packages/cyberstrike/test/strikegraph.test.ts"
+      - "STRIKEGRAPH.md"
+      - ".github/workflows/strikegraph.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".cyberstrike/tool/strikegraph.ts"
+      - ".cyberstrike/ontology/strikegraph.json"
+      - ".cyberstrike/skill/strikegraph/**"
+      - "packages/cyberstrike/test/strikegraph.test.ts"
+      - "STRIKEGRAPH.md"
+      - ".github/workflows/strikegraph.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+      - name: Run StrikeGraph tests
+        run: bun test packages/cyberstrike/test/strikegraph.test.ts
