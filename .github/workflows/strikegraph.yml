@@ -32,4 +32,4 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
       - name: Run StrikeGraph tests
-        run: bun test packages/cyberstrike/test/strikegraph.test.ts
+        run: cd packages/cyberstrike && bun test test/strikegraph.test.ts
