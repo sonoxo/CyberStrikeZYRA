@@ -22,12 +22,19 @@ jobs:
 
       - name: Setup Git Committer
         id: setup-git-committer
+        continue-on-error: true
         uses: ./.github/actions/setup-git-committer
         with:
           cyberstrike-app-id: ${{ vars.CYBERSTRIKE_APP_ID }}
           cyberstrike-app-secret: ${{ secrets.CYBERSTRIKE_APP_SECRET }}
 
+      - name: Fallback git config
+        if: steps.setup-git-committer.outcome == 'failure'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Sync beta branch
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token || github.token }}
         run: bun script/beta.ts
