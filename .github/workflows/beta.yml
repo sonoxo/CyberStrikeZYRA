@@ -35,6 +35,13 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Sync beta branch
+        if: steps.setup-git-committer.outcome == 'success'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token || github.token }}
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+        run: bun script/beta.ts
+
+      - name: Sync beta branch
+        if: steps.setup-git-committer.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bun script/beta.ts
