@@ -40,7 +40,7 @@ jobs:
           FALLBACK_TOKEN: ${{ github.token }}
         run: |
           export GH_TOKEN="$FALLBACK_TOKEN"
-          if [ "${{ steps.setup-git-committer.outcome }}" = "success" ]; then
+          if [ "${{ steps.setup-git-committer.outcome }}" = "success" ] && [ -n "$APP_TOKEN" ]; then
             export GH_TOKEN="$APP_TOKEN"
           fi
           bun script/beta.ts
