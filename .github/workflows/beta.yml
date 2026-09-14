@@ -22,6 +22,7 @@ jobs:
 
       - name: Setup Git Committer
         id: setup-git-committer
+        continue-on-error: true
         uses: ./.github/actions/setup-git-committer
         with:
           cyberstrike-app-id: ${{ vars.CYBERSTRIKE_APP_ID }}
@@ -29,5 +30,14 @@ jobs:
 
       - name: Sync beta branch
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
-        run: bun script/beta.ts
+          APP_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          FALLBACK_TOKEN: ${{ github.token }}
+        run: |
+          export GH_TOKEN="$FALLBACK_TOKEN"
+          if [ "${{ steps.setup-git-committer.outcome }}" = "success" ] && [ -n "$APP_TOKEN" ]; then
+            export GH_TOKEN="$APP_TOKEN"
+          else
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          fi
+          bun script/beta.ts
