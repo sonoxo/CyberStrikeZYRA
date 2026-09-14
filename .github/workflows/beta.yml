@@ -35,12 +35,15 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Select sync token
+        env:
+          APP_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          FALLBACK_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ steps.setup-git-committer.outcome }}" = "success" ]; then
-            echo "GH_TOKEN=${{ steps.setup-git-committer.outputs.token }}" >> "$GITHUB_ENV"
+            echo "GH_TOKEN=$APP_TOKEN" >> "$GITHUB_ENV"
             exit 0
           fi
-          echo "GH_TOKEN=${{ github.token }}" >> "$GITHUB_ENV"
+          echo "GH_TOKEN=$FALLBACK_TOKEN" >> "$GITHUB_ENV"
 
       - name: Sync beta branch
         run: bun script/beta.ts
