@@ -28,12 +28,6 @@ jobs:
           cyberstrike-app-id: ${{ vars.CYBERSTRIKE_APP_ID }}
           cyberstrike-app-secret: ${{ secrets.CYBERSTRIKE_APP_SECRET }}
 
-      - name: Fallback git config
-        if: steps.setup-git-committer.outcome != 'success' || steps.setup-git-committer.outputs.token == ''
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Sync beta branch
         env:
           APP_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
@@ -42,5 +36,8 @@ jobs:
           export GH_TOKEN="$FALLBACK_TOKEN"
           if [ "${{ steps.setup-git-committer.outcome }}" = "success" ] && [ -n "$APP_TOKEN" ]; then
             export GH_TOKEN="$APP_TOKEN"
+          else
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
           fi
           bun script/beta.ts
