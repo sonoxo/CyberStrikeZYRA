@@ -29,7 +29,7 @@ jobs:
           cyberstrike-app-secret: ${{ secrets.CYBERSTRIKE_APP_SECRET }}
 
       - name: Fallback git config
-        if: steps.setup-git-committer.outcome == 'failure'
+        if: steps.setup-git-committer.outcome != 'success' || steps.setup-git-committer.outputs.token == ''
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
